@@ -147,14 +147,15 @@ repl = do hSetBuffering stdin LineBuffering
           hSetBuffering stdout NoBuffering
           putStr "λ> "
           s <- getLine
-          case head $ words s of
-            ":quit"   -> return ()
-            ":q"      -> return ()
-            ":h"      -> printHelp >> repl
-            ":help"   -> printHelp >> repl
-            ":clear"  -> clear >> repl
-            ":cls"    -> clear >> repl
-            otherwise -> case (parseLambda $ addParens s) of
+          case words s of
+            []         -> repl
+            ":quit":_  -> return ()
+            ":q":_     -> return ()
+            ":h":_     -> printHelp >> repl
+            ":help":_  -> printHelp >> repl
+            ":clear":_ -> clear >> repl
+            ":cls":_   -> clear >> repl
+            otherwise  -> case (parseLambda $ addParens $ unwords $ words s) of
                            Right l -> do putStr $ show l
                                          putStr " = "
                                          print $ evalLambda l
