@@ -1,4 +1,4 @@
--- Lambda Calculus Interpreter, Version 0.1.2
+-- Lambda Calculus Interpreter, Version 0.1.3
 
 import System.IO
 import Data.Char
@@ -139,7 +139,7 @@ addParens s = if head s == '\\' || checkApps 0 s
         checkApps n (')':cs) = checkApps (n-1) cs
         checkApps n (_:cs)   = checkApps n cs
 
--- TODO : Add different options:
+-- TODO :
 --  * Enable combinator definitions and reading them from a file.
 --  ! Ensure that there are no infinite loops or evaluation errors 
 
@@ -173,7 +173,7 @@ repl = do hSetBuffering stdin LineBuffering
 welcomeMsg :: IO ()
 welcomeMsg = do putStrLn "Lambda Calculus Interpreter"
                 putStrLn "Version: 0.1.2"
-                putStrLn "Build Date: February 1st, 2018"
+                putStrLn "Build Date: February 2nd, 2018"
                 putStrLn "Type :help or :h for help and information on commands"
 
 printHelp :: IO ()
@@ -208,8 +208,6 @@ printHelp = do putStrLn "Lambda Calculus Interpreter"
                         \ application:"
                putStrLn "    * ((E1 v) w) is correct"
                putStrLn "    * (E1 v w) is correct and equivalent to the above"
-               putStrLn "\nAny incorrect expression will be evaluated to\
-                         \ \"(error)\""
                putStrLn "\nADDITIONAL COMMANDS:"
                putStrLn " - :quit or :q will quit the interpreter."
                putStrLn " - :help or :h will show this help message."
