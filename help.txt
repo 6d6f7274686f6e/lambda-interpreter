@@ -1,0 +1,34 @@
+Lambda Calculus Interpreter
+---------------------------
+
+RULES:
+ - Variable names are 1 character long and can be anything 
+  except the following:
+    * Numbers
+    * Underscore ('_')
+    * Parenthesis
+    * Backslash ('\')    
+    * Space (' ')
+ - Variable names can be surrounded by parenthesis: (v) or v
+ - When encoutering an ambiguous case, the interpreter will try to rename 
+  variables by adding a number after them:
+    * (\xx.x) is equivalent to (\x.(\x.x))
+     The second lambda definition shadows the first, so the compiler will
+     evaluate this to (\xx_1.x)
+    * (\xy.x y) y will evaluate to (\y_1.y y_1)
+ - Functions should be preferably surrounded by parenthesis if you want to
+  avoid headaches:
+    * \v.E will work, but..
+    * \v.E x is equivalent to \v.(E x) and not to (\v.E) x
+ - There can be multiple parameters for a function definition:
+    * (\x.(\y.x)) is correct
+    * (\\xy.x) is correct and equivalent to the above
+ - Application is done with spaces: (E1 E2)
+ - There can be multiple arguments for the same application:
+    * ((E1 v) w) is correct
+    * (E1 v w) is correct and equivalent to the above
+
+ADDITIONAL COMMANDS:
+ - :quit or :q will quit the interpreter.
+ - :help or :h will show this help message.
+ - :cls or :clear will clear the console.
