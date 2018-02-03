@@ -50,10 +50,8 @@ evalLambda (Application e1 e2) = case e1 of
                                        $ Application (evalLambda e1) e2
   (Singleton v)                 -> Application (Singleton v) (evalLambda e2)
   (Lambda v e)                  -> evalLambda $ replaceByIn v (evalLambda e2) e
-
-evalLambda (Lambda v e)        = (Lambda w 
-                                   (evalLambda $ replaceByIn v (Singleton w) e))
-                         where w = rename v
+-- !!!!! INFINITE LOOP HERE ??
+evalLambda (Lambda v e)        = (Lambda v $ evalLambda e)
 evalLambda (Singleton v)       = (Singleton v)
 
 replaceByIn :: Variable -> Expr -> Expr -> Expr
@@ -62,15 +60,13 @@ replaceByIn v e (Singleton w)       = if v == w
                                       else Singleton w
 replaceByIn v e (Application e1 e2) = Application (replaceByIn v e e1)
                                                   (replaceByIn v e e2)
-replaceByIn v e (Lambda w e1)       = if v /= w 
-                                      then if w `isFreeIn` e
-                                           then replaceByIn v e
-                                                 (Lambda (rename w)
-                                                   (replaceByIn w 
-                                                     (Singleton (rename w))
-                                                     e1))
-                                           else Lambda w (replaceByIn v e e1)
-                                      else Lambda w e1
+replaceByIn v e (Lambda w e1)       = if v == w || w `isFreeIn` e
+                                      then replaceByIn v e
+                                             (Lambda (rename w)
+                                                     (replaceByIn w 
+                                                       (Singleton (rename w))
+                                                       e1))
+                                      else Lambda w (replaceByIn v e e1)
 
 -- replaceByIn v e (Lambda w e1)       = if (Singleton w) `isIn` e
 --                                       then doit v e $ Lambda (rename w)
