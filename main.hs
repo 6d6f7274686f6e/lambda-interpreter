@@ -14,7 +14,6 @@ data Expr = Singleton Variable
 
 instance Show Expr where
     show (Singleton (v, 0)) = [v]
---    show (Singleton (v, 1)) = [v]
     show (Singleton (v, i)) = [v, '_'] ++ (show $ i - 1)
     show (Application e1@(Application _ _) e2) = (init $ show e1) ++ " " 
                                                ++ show e2 ++ ")"
@@ -66,30 +65,6 @@ replaceByIn v e (Lambda w e1)       = if v == w || w `isFreeIn` e
                                                        (Singleton (rename w))
                                                        e1))
                                       else Lambda w (replaceByIn v e e1)
-
--- replaceByIn v e (Lambda w e1)       = if (Singleton w) `isIn` e
---                                       then doit v e $ Lambda (rename w)
---                                               (replaceByIn w 
---                                                            (Singleton 
---                                                              $ rename w)
---                                                            e1)
---                                       else doit v e (Lambda w e1)
---         where doit v e (Lambda w e1)  = if v == w 
---                                         then 
---                                           Lambda w1
---                                                  (replaceByIn w (Singleton w1)
---                                                  e1)
---                                         else
---                                           Lambda w (replaceByIn v e e1)
---                                         where w1 = rename w
-
-isIn :: Expr -> Expr -> Bool
-isIn (Singleton v)         (Singleton w)       = (v == w)
-isIn v@(Singleton _)       (Application e1 e2) = v `isIn` e1 || v `isIn` e2
-isIn v@(Singleton c)       (Lambda c2 e)       = c == c2 || isIn v e
-isIn (Application e1 e2)   e3                  = e1 `isIn` e3 || e2 `isIn` e3
-isIn (Lambda v1 e1)        e2                  = (Singleton v1) `isIn` e2
-                                               || e1 `isIn` e2
 
 isFreeIn :: Variable -> Expr -> Bool
 isFreeIn v (Singleton w)       = v == w
