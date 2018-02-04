@@ -1,4 +1,4 @@
--- Lambda Calculus Interpreter, Version 0.1.3
+-- Lambda Calculus Interpreter, Version 0.1.4
 
 import System.IO
 import Data.Char
@@ -38,7 +38,6 @@ rename :: Variable -> Variable
 rename = fmap (+1)
 
 evalLambda :: Expr -> Expr
-
 evalLambda (Application e1 e2) = case e1 of
   (Application (Singleton v) e) -> Application 
                                      (Application (Singleton v) $ evalLambda e)
@@ -52,6 +51,7 @@ evalLambda (Application e1 e2) = case e1 of
 evalLambda (Lambda v e)        = (Lambda v $ evalLambda e)
 evalLambda (Singleton v)       = (Singleton v)
 
+-- replace by in is Beta-equivalence
 replaceByIn :: Variable -> Expr -> Expr -> Expr
 replaceByIn v e (Singleton w)       = if v == w 
                                       then e
@@ -66,6 +66,7 @@ replaceByIn v e (Lambda w e1)       = if v == w || w `isFreeIn` e
                                                        e1))
                                       else Lambda w (replaceByIn v e e1)
 
+-- Tests wether a variable is free or bound in an expression
 isFreeIn :: Variable -> Expr -> Bool
 isFreeIn v (Singleton w)       = v == w
 isFreeIn v (Lambda w e)        = (v /= w) && v `isFreeIn` e
@@ -77,10 +78,12 @@ forbidden :: Char -> Bool
 forbidden v = v `elem` "_ ()\\" || isNumber v
 
 parseLambda :: String -> Either Error Expr
+-- Single variable
 parseLambda [v]                = if forbidden v
                                  then Left  $ IllegalChar v
                                  else Right $ Singleton (v, 0)
 parseLambda ('(':v:")")        = parseLambda [v]
+-- Single parameter lambda expression
 parseLambda ('(':'\\':v:'.':e) = if forbidden v 
                                  then Left $ IllegalChar v
                                  else Lambda (v, 0) <$> (parseLambda $ addParens
@@ -90,6 +93,7 @@ parseLambda ('(':'\\':v:e)     = if forbidden v
                                  then Left $ IllegalChar v
                                  else Lambda (v, 0) <$> (parseLambda $ "(\\"
                                                                      ++ e)
+-- Application. There can be multiple arguments.
 parseLambda ('(':s)            = Application <$> (fst splitted)
                                              <*> (snd splitted)
                   where splitted = ( parseLambda (addParens $ take (m-2) 
@@ -105,6 +109,7 @@ parseLambda ('(':s)            = Application <$> (fst splitted)
                                      otherwise -> n
 parseLambda _                  = Left ParseError
 
+-- Adds parenthesis around an expression if needed
 addParens :: String -> String
 addParens "" = ""
 addParens s = if head s == '\\' || checkApps 0 s
@@ -123,6 +128,7 @@ addParens s = if head s == '\\' || checkApps 0 s
 
 -- IO
 
+-- Clear the screen and go back to the top.
 clear :: IO ()
 clear = putStr "\x1b[2J\x1b[0;0H"
 
@@ -148,15 +154,15 @@ repl = do hSetBuffering stdin LineBuffering
 
 main :: IO ()
 main = do putStrLn "Lambda Calculus Interpreter"
-          putStrLn "Version: 0.1.3"
-          putStrLn "Build Date: February 2nd, 2018"
+          putStrLn "Version: 0.1.4"
+          putStrLn "Build Date: February 4nd, 2018"
           putStrLn "Type :help or :h for help and information on commands"
           repl
 
 printHelp :: IO ()
 printHelp = readFile "help.txt" >>= putStr
 
--- some lambda terms for testing
+-- Some lambda terms for testing in GHCi
 
 lnumber :: Int -> Expr
 lnumber n = (Lambda ('f', 0)
@@ -198,6 +204,7 @@ liszero = (Lambda ('n', 0)
                                  (Lambda ('v', 0) (lfalse)))
                                ltrue))
 
+-- I'm too lazy to type all that expression down :)
 lY = case parseLambda "(\\f.(\\x.f (x x)) (\\x.f (x x)))" of
       Right e1 -> e1
 
