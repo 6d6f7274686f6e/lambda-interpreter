@@ -219,3 +219,11 @@ lH = Lambda ('f', 0)
                          (Application 
                            (Singleton ('f', 0))
                            (Application lpred (Singleton ('n', 0)))))))
+
+lK = Lambda ('x', 0) (Lambda ('y', 0) (Singleton ('x', 0)))
+lS = Lambda ('x', 0) (Lambda ('y', 0) (Lambda ('z', 0) 
+        (Application (Application x z) (Application y z)))) 
+   where x = Singleton ('x', 0)
+         y = Singleton ('y', 0)
+         z = Singleton ('z', 0)
+lI = (Lambda ('x', 0) (Singleton ('x', 0)))
