@@ -49,8 +49,7 @@ evalLambda (Application e1 e2) = case e1 of
                                      else evalLambda 
                                        $ Application (evalLambda e1) e2
   (Singleton v)                 -> Application (Singleton v) (evalLambda e2)
-  (Lambda v e)                  -> evalLambda $ replaceByIn v (evalLambda e2) e
--- !!!!! INFINITE LOOP HERE ??
+  (Lambda v e)                  -> evalLambda $ replaceByIn v e2 e
 evalLambda (Lambda v e)        = (Lambda v $ evalLambda e)
 evalLambda (Singleton v)       = (Singleton v)
 
