@@ -12,10 +12,12 @@ RULES:
  - Variable names can be surrounded by parenthesis: (v) or v
  - When encoutering an ambiguous case, the interpreter will try to rename 
   variables by adding a number after them:
-    * (\xx.x) is equivalent to (\x.(\x.x))
+    * (\xx.x) z is equivalent to (\x.(\x.x)) z
      The second lambda definition shadows the first, so the compiler will
-     evaluate this to (\xx_1.x)
-    * (\xy.x y) y will evaluate to (\y_1.y y_1)
+     evaluate this to (\x_0.x_0).
+     Note: If you evaluate "(\xx.x)" (without application), the compiler will
+     return the exact same expression. 
+    * (\xy.x y) y will evaluate to (\y_0.y y_0)
  - Functions should be preferably surrounded by parenthesis if you want to
   avoid headaches:
     * \v.E will work, but..
