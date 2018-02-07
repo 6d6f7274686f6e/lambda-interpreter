@@ -15,11 +15,11 @@ data Expr = Singleton Variable
 instance Show Expr where
     show (Singleton (v, 0)) = [v]
     show (Singleton (v, i)) = [v, '_'] ++ (show $ i - 1)
-    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ " " 
-                                               ++ show e2 ++ ")"
+--    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ " " 
+--                                               ++ show e2 ++ ")"
     show (Application e1 e2) = "(" ++ (show e1) ++ " " ++ (show e2) ++ ")"
-    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) 
-                                   ++ (tail $ tail $ show e)
+--    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) 
+--                                   ++ (tail $ tail $ show e)
     show (Lambda v e) = "(λ" ++ (show (Singleton v)) ++ "." ++ show e ++ ")"
 
 data Error = IllegalChar Char
@@ -83,6 +83,8 @@ parseLambda [v]                = if forbidden v
                                  then Left  $ IllegalChar v
                                  else Right $ Singleton (v, 0)
 parseLambda ('(':v:")")        = parseLambda [v]
+-- For compability with the show instance:
+parseLambda ('(':'λ':s)       = parseLambda ('(':'\\':s)
 -- Single parameter lambda expression
 parseLambda ('(':'\\':v:'.':e) = if forbidden v 
                                  then Left $ IllegalChar v
@@ -96,13 +98,12 @@ parseLambda ('(':'\\':v:e)     = if forbidden v
 -- Application. There can be multiple arguments.
 parseLambda ('(':s)            = Application <$> (fst splitted)
                                              <*> (snd splitted)
-                  where splitted = ( parseLambda (addParens $ take (m-2) 
-                                                            $ init s)
-                                   , parseLambda (drop (m-1) $ init s))
+                  where splitted = (,) <$> parseLambda . addParens . take (m-2)
+                                       <*> parseLambda . drop (m-1)
+                                       $ init s
                         n        = length $ takeWhile (/= 0) $ tail $ scanl f 0
-                                   $ reverse $ init s
+                                 $ reverse $ init s
                         m        = (length $ init s) - n
-                        f :: Integer -> Char -> Integer
                         f n c    = case c of
                                      '(' -> n+1
                                      ')' -> n-1
@@ -162,64 +163,7 @@ main = do putStrLn "Lambda Calculus Interpreter"
 printHelp :: IO ()
 printHelp = readFile "help.txt" >>= putStr
 
--- Some lambda terms for testing in GHCi
-
-lnumber :: Int -> Expr
-lnumber n = (Lambda ('f', 0)
-                    (Lambda ('x', 0) (loop n)))
-            where loop 0 = Singleton ('x', 0)
-                  loop n = Application (Singleton ('f', 0)) $ loop (n-1)
-
-lpair = (Lambda ('n', 0)
-                (Lambda ('m', 0)
-                        (Lambda ('f', 0)
-                                (Application (Application (Singleton ('f', 0))
-                                                          (Singleton ('n', 0)))
-                                             (Singleton ('m', 0))))))
-
-lmult = (Lambda ('n', 0) (Lambda ('m', 0) (Lambda ('f', 0)
-                (Application (Singleton ('m', 0))
-                             (Application (Singleton ('n', 0))
-                                          (Singleton ('f', 0)))))))
-lpred =  Lambda ('n', 0) (Lambda ('f', 0) 
-                         (Lambda ('x', 0) 
-                         (Application 
-                           (Application 
-                             (Application (Singleton ('n', 0)) 
-                                          (Lambda ('g', 0)
-                                            (Lambda ('h', 0)
-                                              (Application
-                                                 (Singleton ('h', 0))
-                                                 (Application 
-                                                   (Singleton ('g', 0)) 
-                                                   (Singleton ('f', 0)))))))
-                             (Lambda ('u', 0) (Singleton ('x', 0))))
-                           (Lambda ('u', 0) (Singleton ('u', 0))))))
-
-ltrue  = Lambda ('x', 0) (Lambda ('y', 0) (Singleton ('x', 0)))
-lfalse = Lambda ('x', 0) (Lambda ('y', 0) (Singleton ('y', 0)))
-
-liszero = (Lambda ('n', 0)
-                  (Application (Application (Singleton ('n', 0))
-                                 (Lambda ('v', 0) (lfalse)))
-                               ltrue))
-
--- I'm too lazy to type all that expression down :)
-lY = case parseLambda "(\\f.(\\x.f (x x)) (\\x.f (x x)))" of
-      Right e1 -> e1
-
-lfactorial = Application lY lH
-lH = Lambda ('f', 0)
-            (Lambda ('n', 0)
-                    (Application
-                       (Application (Application liszero (Singleton ('n', 0))) 
-                         (lnumber 1))
-                       (Application 
-                         (Application lmult (Singleton ('n', 0))) 
-                         (Application 
-                           (Singleton ('f', 0))
-                           (Application lpred (Singleton ('n', 0)))))))
-
+-- S-K-I combinators
 lK = Lambda ('x', 0) (Lambda ('y', 0) (Singleton ('x', 0)))
 lS = Lambda ('x', 0) (Lambda ('y', 0) (Lambda ('z', 0) 
         (Application (Application x z) (Application y z)))) 
@@ -227,3 +171,38 @@ lS = Lambda ('x', 0) (Lambda ('y', 0) (Lambda ('z', 0)
          y = Singleton ('y', 0)
          z = Singleton ('z', 0)
 lI = (Lambda ('x', 0) (Singleton ('x', 0)))
+
+-- Transforms any lambda-term to a series of S, K and I combinators
+lT :: String -> String
+lT s = case parseLambda $ addParens s of
+  Left err -> show err
+  Right rs -> case rs of
+    Singleton x       -> [fst x]
+    Application e1 e2 -> '(':(lTexpr e1) ++ ' ':(lTexpr e2) ++ ")"
+    Lambda x e        -> if x `isFreeIn` e 
+                         then case e of 
+                           Singleton x       -> "I"
+                           Lambda y e        -> lT ("(\\" ++ [fst x] 
+                                                   ++ '.':(lTexpr (Lambda y e))
+                                                   ++ ")")
+                           Application e1 e2 -> "(S " ++ lTexpr (Lambda x e1)
+                                              ++ " " ++ lTexpr (Lambda x e2) 
+                                              ++ ")"
+                         else "(K " ++ (lTexpr e) ++ ")"
+lTexpr :: Expr -> String
+lTexpr = lT . show
+
+-- Parses S-K-I series into lambda terms.
+parseSKI :: String -> Either Error Expr
+parseSKI s = lTinverse <$> (parseLambda $ addParens s)
+
+lTinverse :: Expr -> Expr
+lTinverse (Application e1 e2) = Application (lTinverse e1) (lTinverse e2)
+lTinverse (Singleton v)       = case v of
+                                 ('K', _)  -> lK
+                                 ('S', _)  -> lS
+                                 ('I', _)  -> lI
+                                 otherwise -> (Singleton v)
+
+evalSKI :: Expr -> Expr
+evalSKI = evalLambda . lTinverse
