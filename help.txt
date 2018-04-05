@@ -30,6 +30,19 @@ RULES:
     * ((E1 v) w) is correct
     * (E1 v w) is correct and equivalent to the above
 
+SPECIAL COMMANDS:
+ - :T <expr> will convert <expr> to another expression containing only S, K, & I 
+  combinators and variable names.
+    * :T (\xy.y) will be converted to (K I)
+    * :T (\xy.z) will be converted to (K (K z))
+    * :T (\xy.z) m will be converted to ((K (K z)) m) and won't be evaluated any
+     further.
+ - :SKI <expr> will interpret any expression containing S, K and I combinators
+  (if you try to use SKI combinators without this command, the interpreter will
+  parse them as regular variable names).
+    * (S K K) WITHOUT the :SKI command will give back (S K K)
+    * :SKI (S K K) will be converted to (\x.x)
+
 ADDITIONAL COMMANDS:
  - :quit or :q will quit the interpreter.
  - :help or :h will show this help message.

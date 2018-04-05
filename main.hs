@@ -1,5 +1,3 @@
--- Lambda Calculus Interpreter, Version 0.1.4
-
 import System.IO
 import Data.Char
 
@@ -15,11 +13,11 @@ data Expr = Singleton Variable
 instance Show Expr where
     show (Singleton (v, 0)) = [v]
     show (Singleton (v, i)) = [v, '_'] ++ (show $ i - 1)
---    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ " " 
---                                               ++ show e2 ++ ")"
+    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ " " 
+                                               ++ show e2 ++ ")"
     show (Application e1 e2) = "(" ++ (show e1) ++ " " ++ (show e2) ++ ")"
---    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) 
---                                   ++ (tail $ tail $ show e)
+    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) 
+                                   ++ (tail $ tail $ show e)
     show (Lambda v e) = "(λ" ++ (show (Singleton v)) ++ "." ++ show e ++ ")"
 
 data Error = IllegalChar Char
@@ -146,7 +144,10 @@ repl = do hSetBuffering stdin LineBuffering
             ":help":_  -> printHelp >> repl
             ":clear":_ -> clear >> repl
             ":cls":_   -> clear >> repl
-            otherwise  -> case (parseLambda $ addParens $ unwords $ words s) of
+            ":T":e     -> putStrLn (lT $ unwords e) >> repl
+            ":SKI":e   -> parse parseSKI $ unwords e
+            otherwise  -> parse parseLambda s 
+        where parse f s = case (f $ addParens $ unwords $ words s) of
                            Right l -> do putStr $ show l
                                          putStr " = "
                                          print $ evalLambda l
@@ -155,8 +156,8 @@ repl = do hSetBuffering stdin LineBuffering
 
 main :: IO ()
 main = do putStrLn "Lambda Calculus Interpreter"
-          putStrLn "Version: 0.1.4"
-          putStrLn "Build Date: February 4nd, 2018"
+          putStrLn "Version: 0.2.2"
+          putStrLn "Build Date: April 5th, 2018"
           putStrLn "Type :help or :h for help and information on commands"
           repl
 
@@ -203,6 +204,7 @@ lTinverse (Singleton v)       = case v of
                                  ('S', _)  -> lS
                                  ('I', _)  -> lI
                                  otherwise -> (Singleton v)
+lTinverse (Lambda v e)        = Lambda v (lTinverse e)
 
 evalSKI :: Expr -> Expr
 evalSKI = evalLambda . lTinverse
