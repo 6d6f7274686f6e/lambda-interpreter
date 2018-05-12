@@ -165,12 +165,8 @@ lT s = case parseLambda $ addParens s of
     Lambda x e        -> if x `isFreeIn` e 
                          then case e of 
                            Singleton x       -> "I"
-                           Lambda y e        -> lT ("(\\" ++ [fst x] 
-                                                   ++ '.':(lTexpr (Lambda y e))
-                                                   ++ ")")
-                           Application e1 e2 -> "(S " ++ lTexpr (Lambda x e1)
-                                              ++ " " ++ lTexpr (Lambda x e2) 
-                                              ++ ")"
+                           Lambda y e        -> lT $ "(\\" ++ [fst x] ++ '.':(lTexpr (Lambda y e)) ++ ")"
+                           Application e1 e2 -> "(S " ++ lTexpr (Lambda x e1) ++ " " ++ lTexpr (Lambda x e2) ++ ")"
                          else "(K " ++ (lTexpr e) ++ ")"
 lTexpr :: Expr -> String
 lTexpr = lT . show
