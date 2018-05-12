@@ -13,11 +13,9 @@ data Expr = Singleton Variable
 instance Show Expr where
     show (Singleton (v, 0)) = [v]
     show (Singleton (v, i)) = [v, '_'] ++ (show $ i - 1)
-    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ " " 
-                                               ++ show e2 ++ ")"
+    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ ' ':(show e2) ++ ")"
     show (Application e1 e2) = "(" ++ (show e1) ++ " " ++ (show e2) ++ ")"
-    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) 
-                                   ++ (tail $ tail $ show e)
+    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) ++ (tail . tail $ show e)
     show (Lambda v e) = "(λ" ++ (show (Singleton v)) ++ "." ++ show e ++ ")"
 
 data Error = IllegalChar Char
@@ -27,8 +25,7 @@ data Error = IllegalChar Char
 instance Show Error where
     show e = "Error: " ++ case e of
                            ParseError    -> "no parse"
-                           IllegalChar c -> "illegal use of character '"
-                                            ++ (c:"'")
+                           IllegalChar c -> "illegal use of character '" ++ (c:"'")
 
 -- EVALUATOR
 
@@ -37,13 +34,10 @@ rename = fmap (+1)
 
 evalLambda :: Expr -> Expr
 evalLambda (Application e1 e2) = case e1 of
-  (Application (Singleton v) e) -> Application 
-                                     (Application (Singleton v) $ evalLambda e)
-                                     e2
+  (Application (Singleton v) e) -> Application (Application (Singleton v) $ evalLambda e) e2
   (Application _ _)             -> if (e1 == evalLambda e1)
                                      then Application e1 e2
-                                     else evalLambda 
-                                       $ Application (evalLambda e1) e2
+                                     else evalLambda $ Application (evalLambda e1) e2
   (Singleton v)                 -> Application (Singleton v) (evalLambda e2)
   (Lambda v e)                  -> evalLambda $ replaceByIn v e2 e
 evalLambda (Lambda v e)        = (Lambda v $ evalLambda e)
@@ -51,17 +45,11 @@ evalLambda (Singleton v)       = (Singleton v)
 
 -- replace by in is Beta-equivalence
 replaceByIn :: Variable -> Expr -> Expr -> Expr
-replaceByIn v e (Singleton w)       = if v == w 
-                                      then e
-                                      else Singleton w
-replaceByIn v e (Application e1 e2) = Application (replaceByIn v e e1)
-                                                  (replaceByIn v e e2)
+replaceByIn v e (Singleton w)       = if v == w then e else Singleton w
+replaceByIn v e (Application e1 e2) = Application (replaceByIn v e e1) (replaceByIn v e e2)
 replaceByIn v e (Lambda w e1)       = if v == w || w `isFreeIn` e
-                                      then replaceByIn v e
-                                             (Lambda (rename w)
-                                                     (replaceByIn w 
-                                                       (Singleton (rename w))
-                                                       e1))
+                                      then replaceByIn v e (Lambda (rename w) 
+                                                                   (replaceByIn w (Singleton (rename w)) e1))
                                       else Lambda w (replaceByIn v e e1)
 
 -- Tests wether a variable is free or bound in an expression
@@ -86,21 +74,17 @@ parseLambda ('(':'λ':s)       = parseLambda ('(':'\\':s)
 -- Single parameter lambda expression
 parseLambda ('(':'\\':v:'.':e) = if forbidden v 
                                  then Left $ IllegalChar v
-                                 else Lambda (v, 0) <$> (parseLambda $ addParens
-                                                                   $ init e)
+                                 else Lambda (v, 0) <$> (parseLambda . addParens $ init e)
 -- Multiple parameters lambda expression
 parseLambda ('(':'\\':v:e)     = if forbidden v
                                  then Left $ IllegalChar v
-                                 else Lambda (v, 0) <$> (parseLambda $ "(\\"
-                                                                     ++ e)
+                                 else Lambda (v, 0) <$> (parseLambda $ "(\\" ++ e)
 -- Application. There can be multiple arguments.
-parseLambda ('(':s)            = Application <$> (fst splitted)
-                                             <*> (snd splitted)
+parseLambda ('(':s)            = Application <$> (fst splitted) <*> (snd splitted)
                   where splitted = (,) <$> parseLambda . addParens . take (m-2)
                                        <*> parseLambda . drop (m-1)
                                        $ init s
-                        n        = length $ takeWhile (/= 0) $ tail $ scanl f 0
-                                 $ reverse $ init s
+                        n        = length $ takeWhile (/= 0) $ tail $ scanl f 0 $ reverse $ init s
                         m        = (length $ init s) - n
                         f n c    = case c of
                                      '(' -> n+1
@@ -111,9 +95,7 @@ parseLambda _                  = Left ParseError
 -- Adds parenthesis around an expression if needed
 addParens :: String -> String
 addParens "" = ""
-addParens s = if head s == '\\' || checkApps 0 s
-              then '(':(s ++ ")")
-              else s
+addParens s = if head s == '\\' || checkApps 0 s then '(':(s ++ ")") else s
   where checkApps :: Integer -> [Char] -> Bool
         checkApps 0 (' ':_)  = True
         checkApps _ []       = False
