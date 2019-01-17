@@ -1,188 +1,127 @@
-import System.IO
+{-# LANGUAGE LambdaCase #-}
+
 import Data.Char
+import qualified Data.Map as M
+import System.IO
+import Control.Monad
+import Control.Applicative (some)
+import Text.ParserCombinators.Parsec
 
--- DATA DEFINITIONS
-
-type Variable = (Char, Integer)
-
-data Expr = Singleton Variable
-          | Application Expr Expr
-          | Lambda Variable Expr
-          deriving Eq
+data Expr = App Expr Expr
+          | Singleton Var
+          | Lambda Var Expr
+          deriving (Eq)
 
 instance Show Expr where
-    show (Singleton (v, 0)) = [v]
-    show (Singleton (v, i)) = [v, '_'] ++ (show $ i - 1)
-    show (Application e1@(Application _ _) e2) = (init $ show e1) ++ ' ':(show e2) ++ ")"
-    show (Application e1 e2) = "(" ++ (show e1) ++ " " ++ (show e2) ++ ")"
-    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) ++ (tail . tail $ show e)
-    show (Lambda v e) = "(λ" ++ (show (Singleton v)) ++ "." ++ show e ++ ")"
+    show (Singleton (v, 0))        = [v]
+    show (Singleton (v, i))        = v:"_" ++ show i
+    show (App e1@(App _ _) e2)     = (init $ show e1) ++ " " ++ show e2 ++ ")"
+    show (App e1 e2)               = "(" ++ (show e1) ++ " " ++ (show e2) ++ ")"
+    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) ++ (tail $ tail $ show e)
+    show (Lambda v e)              = "(λ" ++ (show (Singleton v)) ++ "." ++ show e ++ ")"
 
-data Error = IllegalChar Char
-           | ParseError
-           deriving Eq
+type Var = (Char, Int)
+type Env = M.Map Var Expr
 
-instance Show Error where
-    show e = "Error: " ++ case e of
-                           ParseError    -> "no parse"
-                           IllegalChar c -> "illegal use of character '" ++ (c:"'")
+eval :: Expr -> Env -> Expr
+eval (Singleton v) = maybe (Singleton v) id . M.lookup v
+eval (Lambda v e)  = rename v e >>= \x -> Lambda x . eval e . M.insert v (Singleton x)
+eval (App e1 e2)   = eval e1 >>= \case
+  Lambda v e -> eval e . (M.insert v =<< eval e2)
+  x          -> App x . eval e2
 
--- EVALUATOR
+-- renames a Variable in Expr, only if necessary
+rename :: Var -> Expr -> Env -> Var
+rename v e env = if M.null $ M.filterWithKey (\w f -> v `isFreeIn` f && w `isFreeIn` e) env
+                 then v
+                 else (+1) <$> v
 
-rename :: Variable -> Variable
-rename = fmap (+1)
+isFreeIn :: Var -> Expr -> Bool
+isFreeIn v (Singleton w) = v == w
+isFreeIn v (Lambda w e)  = (v /= w) && v `isFreeIn` e
+isFreeIn v (App e1 e2)   = (v `isFreeIn` e1) || (v `isFreeIn` e2)
 
-evalLambda :: Expr -> Expr
-evalLambda (Application e1 e2) = case e1 of
-  (Application (Singleton v) e) -> Application (Application (Singleton v) $ evalLambda e) e2
-  (Application _ _)             -> if (e1 == evalLambda e1)
-                                     then Application e1 e2
-                                     else evalLambda $ Application (evalLambda e1) e2
-  (Singleton v)                 -> Application (Singleton v) (evalLambda e2)
-  (Lambda v e)                  -> evalLambda $ replaceByIn v e2 e
-evalLambda (Lambda v e)        = (Lambda v $ evalLambda e)
-evalLambda (Singleton v)       = (Singleton v)
+parseExpr :: Parser Expr
+parseExpr =   try (foldl App <$> factor <*> some (char ' ' *> factor))
+          <|> factor
+  where factor =   try (do char '\\' <|> char 'λ'
+                           vars <- some var
+                           char '.'
+                           flip (foldr Lambda) vars <$> parseExpr)
+               <|> try (Singleton <$> var)
+               <|> (char '(' *> parseExpr <* char ')')
+        var    =   try ((,) <$> letter <*> (read <$> (char '_' >> some digit)))
+               <|> (flip (,) 0) <$> letter
 
--- replace by in is Beta-equivalence
-replaceByIn :: Variable -> Expr -> Expr -> Expr
-replaceByIn v e (Singleton w)       = if v == w then e else Singleton w
-replaceByIn v e (Application e1 e2) = Application (replaceByIn v e e1) (replaceByIn v e e2)
-replaceByIn v e (Lambda w e1)       = if v == w || w `isFreeIn` e
-                                      then replaceByIn v e (Lambda (rename w) 
-                                                                   (replaceByIn w (Singleton (rename w)) e1))
-                                      else Lambda w (replaceByIn v e e1)
+parseLambda :: String -> Either ParseError Expr
+parseLambda = parse (parseExpr <* eof) ""
 
--- Tests wether a variable is free or bound in an expression
-isFreeIn :: Variable -> Expr -> Bool
-isFreeIn v (Singleton w)       = v == w
-isFreeIn v (Lambda w e)        = (v /= w) && v `isFreeIn` e
-isFreeIn v (Application e1 e2) = (v `isFreeIn` e1) || (v `isFreeIn` e2)
+-- SKI combinators
+envSKI :: Env
+envSKI = M.fromList [ (('S', 0), lS)
+                    , (('K', 0), lK)
+                    , (('I', 0), lI)]
+  where lK = Lambda x (Lambda y (Singleton x))
+        lS = Lambda x (Lambda y (Lambda z (App (App (Singleton x) (Singleton z))
+                                               (App (Singleton y) (Singleton z)))))
+        x = ('x', 0)
+        y = ('y', 0)
+        z = ('z', 0)
+        lI = Lambda x (Singleton x)
 
--- PARSER
+-- transforms any expression to an equivalent using only SKI combinators and
+-- free variable names
+transform :: Expr -> Expr
+transform (Singleton x) = Singleton x
+transform (App e1 e2)   = App (transform e1) (transform e2)
+transform (Lambda v e)
+  | v `isFreeIn` e = case e of
+                       Singleton x -> Singleton ('I', 0)
+                       App e1 e2   -> App (App (Singleton ('S', 0))
+                                               (transform (Lambda v e1)))
+                                          (transform (Lambda v e2))
+                       Lambda w e2 -> transform (Lambda v (transform (Lambda w e2)))
+  | otherwise      = App (Singleton ('K', 0)) (transform e)
 
-forbidden :: Char -> Bool
-forbidden v = v `elem` "_ ()\\" || isNumber v
-
-parseLambda :: String -> Either Error Expr
--- Single variable
-parseLambda [v]                = if forbidden v
-                                 then Left  $ IllegalChar v
-                                 else Right $ Singleton (v, 0)
-parseLambda ('(':v:")")        = parseLambda [v]
--- For compability with the show instance:
-parseLambda ('(':'λ':s)       = parseLambda ('(':'\\':s)
--- Single parameter lambda expression
-parseLambda ('(':'\\':v:'.':e) = if forbidden v 
-                                 then Left $ IllegalChar v
-                                 else Lambda (v, 0) <$> (parseLambda . addParens $ init e)
--- Multiple parameters lambda expression
-parseLambda ('(':'\\':v:e)     = if forbidden v
-                                 then Left $ IllegalChar v
-                                 else Lambda (v, 0) <$> (parseLambda $ "(\\" ++ e)
--- Application. There can be multiple arguments.
-parseLambda ('(':s)            = Application <$> (fst splitted) <*> (snd splitted)
-                  where splitted = (,) <$> parseLambda . addParens . take (m-2)
-                                       <*> parseLambda . drop (m-1)
-                                       $ init s
-                        n        = length $ takeWhile (/= 0) $ tail $ scanl f 0 $ reverse $ init s
-                        m        = (length $ init s) - n
-                        f n c    = case c of
-                                     '(' -> n+1
-                                     ')' -> n-1
-                                     otherwise -> n
-parseLambda _                  = Left ParseError
-
--- Adds parenthesis around an expression if needed
-addParens :: String -> String
-addParens "" = ""
-addParens s = if head s == '\\' || checkApps 0 s then '(':(s ++ ")") else s
-  where checkApps :: Integer -> [Char] -> Bool
-        checkApps 0 (' ':_)  = True
-        checkApps _ []       = False
-        checkApps n ('(':cs) = checkApps (n+1) cs
-        checkApps n (')':cs) = checkApps (n-1) cs
-        checkApps n (_:cs)   = checkApps n cs
-
--- TODO :
---  * Enable combinator definitions and reading them from a file.
---  ! Ensure that there are no infinite loops or evaluation errors
-
--- IO
-
--- Clear the screen and go back to the top.
-clear :: IO ()
-clear = putStr "\x1b[2J\x1b[0;0H"
-
-repl :: IO ()
-repl = do hSetBuffering stdin LineBuffering
-          hSetBuffering stdout NoBuffering
-          putStr "λ> "
-          s <- getLine
-          case words s of
-            []         -> repl
-            ":quit":_  -> return ()
-            ":q":_     -> return ()
-            ":h":_     -> printHelp >> repl
-            ":help":_  -> printHelp >> repl
-            ":clear":_ -> clear >> repl
-            ":cls":_   -> clear >> repl
-            ":T":e     -> putStrLn (lT $ unwords e) >> repl
-            ":SKI":e   -> parse parseSKI $ unwords e
-            otherwise  -> parse parseLambda s 
-        where parse f s = case (f $ addParens $ unwords $ words s) of
-                           Right l -> do putStr $ show l
-                                         putStr " = "
-                                         print $ evalLambda l
-                                         repl
-                           Left  e -> do print e >> repl
+repl :: Env -> IO ()
+repl env = do hSetBuffering stdin LineBuffering
+              hSetBuffering stdout NoBuffering
+              putStr "λ> "
+              s <- getLine
+              case words s of
+                []            -> repl env
+                ":quit":_     -> return ()
+                ":q":_        -> return ()
+                ":help":_     -> printHelp >> repl env
+                ":h":_        -> printHelp >> repl env
+                ":clear":_    -> clear >> repl env
+                ":cls":_      -> clear >> repl env
+                ":set":[c]:ss -> case parseLambda $ unwords ss of
+                                   Right l -> repl $ M.insert (c, 0) l env
+                                   Left e  -> print e >> repl env
+                ":SKI":ss     -> process eval (M.union envSKI env) ss
+                ":T":ss       -> process (const . transform) env ss
+                ss            -> process eval env ss
+            where process f env s = case (parseLambda $ unwords s) of
+                                      Right l -> do putStr $ show l
+                                                    putStr " = "
+                                                    print $ f l env
+                                                    repl env
+                                      Left  e -> print e >> repl env
 
 main :: IO ()
 main = do putStrLn "Lambda Calculus Interpreter"
-          putStrLn "Version: 0.2.2"
-          putStrLn "Build Date: April 5th, 2018"
-          putStrLn "Type :help or :h for help and information on commands"
-          repl
+          putStrLn "Version: 0.6.0"
+          putStrLn "Build Date: January 17th, 2019"
+          putStrLn "Type :h or :help for help."
+          repl M.empty
+
+clear :: IO ()
+clear = putStr "\x1b[2J\x1b[0;0H"
+
+-- TODO:
+--  * Enable reading combinator definitions from a file.
+--  * Add a preventive system for infinite loops.
 
 printHelp :: IO ()
 printHelp = readFile "help.txt" >>= putStr
-
--- S-K-I combinators
-lK = Lambda ('x', 0) (Lambda ('y', 0) (Singleton ('x', 0)))
-lS = Lambda ('x', 0) (Lambda ('y', 0) (Lambda ('z', 0) 
-        (Application (Application x z) (Application y z)))) 
-   where x = Singleton ('x', 0)
-         y = Singleton ('y', 0)
-         z = Singleton ('z', 0)
-lI = (Lambda ('x', 0) (Singleton ('x', 0)))
-
--- Transforms any lambda-term to a series of S, K and I combinators
-lT :: String -> String
-lT s = case parseLambda $ addParens s of
-  Left err -> show err
-  Right rs -> case rs of
-    Singleton x       -> [fst x]
-    Application e1 e2 -> '(':(lTexpr e1) ++ ' ':(lTexpr e2) ++ ")"
-    Lambda x e        -> if x `isFreeIn` e 
-                         then case e of 
-                           Singleton x       -> "I"
-                           Lambda y e        -> lT $ "(\\" ++ [fst x] ++ '.':(lTexpr (Lambda y e)) ++ ")"
-                           Application e1 e2 -> "(S " ++ lTexpr (Lambda x e1) ++ " " ++ lTexpr (Lambda x e2) ++ ")"
-                         else "(K " ++ (lTexpr e) ++ ")"
-lTexpr :: Expr -> String
-lTexpr = lT . show
-
--- Parses S-K-I series into lambda terms.
-parseSKI :: String -> Either Error Expr
-parseSKI s = lTinverse <$> (parseLambda $ addParens s)
-
-lTinverse :: Expr -> Expr
-lTinverse (Application e1 e2) = Application (lTinverse e1) (lTinverse e2)
-lTinverse (Singleton v)       = case v of
-                                 ('K', _)  -> lK
-                                 ('S', _)  -> lS
-                                 ('I', _)  -> lI
-                                 otherwise -> (Singleton v)
-lTinverse (Lambda v e)        = Lambda v (lTinverse e)
-
-evalSKI :: Expr -> Expr
-evalSKI = evalLambda . lTinverse

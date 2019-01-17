@@ -2,29 +2,25 @@ Lambda Calculus Interpreter
 ---------------------------
 
 RULES:
- - Variable names are 1 character long and can be anything 
-  except the following:
-    * Numbers
-    * Underscore ('_')
-    * Parenthesis
-    * Backslash ('\')    
-    * Space (' ')
+ - Variable names are letters.
  - Variable names can be surrounded by parenthesis: (v) or v
  - When encoutering an ambiguous case, the interpreter will try to rename 
   variables by adding a number after them:
     * (\xx.x) z is equivalent to (\x.(\x.x)) z
      The second lambda definition shadows the first, so the compiler will
-     evaluate this to (\x_0.x_0).
+     evaluate this to (\x_1.x_1).
      Note: If you evaluate "(\xx.x)" (without application), the compiler will
-     return the exact same expression. 
-    * (\xy.x y) y will evaluate to (\y_0.y y_0)
+     return (\xx_1.x_1).
+    * (\xy.x y) y will evaluate to (\y_1.y y_1)
+ - You can't use indices directly. Entering (\x_1.x_1) directly will lead to 
+  a parse error.
  - Functions should be preferably surrounded by parenthesis if you want to
   avoid headaches:
     * \v.E will work, but..
     * \v.E x is equivalent to \v.(E x) and not to (\v.E) x
  - There can be multiple parameters for a function definition:
     * (\x.(\y.x)) is correct
-    * (\\xy.x) is correct and equivalent to the above
+    * (\xy.x) is correct and equivalent to the above
  - Application is done with spaces: (E1 E2)
  - There can be multiple arguments for the same application:
     * ((E1 v) w) is correct
@@ -37,11 +33,19 @@ SPECIAL COMMANDS:
     * :T (\xy.z) will be converted to (K (K z))
     * :T (\xy.z) m will be converted to ((K (K z)) m) and won't be evaluated any
      further.
+    * Note: this won't necessary be the shortest equivalent expression. For
+     example, K = (\xy.x) will be converted to (S (K K) I).
  - :SKI <expr> will interpret any expression containing S, K and I combinators
   (if you try to use SKI combinators without this command, the interpreter will
   parse them as regular variable names).
     * (S K K) WITHOUT the :SKI command will give back (S K K)
     * :SKI (S K K) will be converted to (\x.x)
+ - :set <var> <expr> will evaluate <expr> and "store" it in <var>.
+    * Entering :set Y (\f.(\x.f (x x)) (\x.f (x x))) will make it so that the 
+    Y combinator is usable throughout the entire session.
+    * You can reset a variable name X by entering :set X X
+    * You can use recursion. :set Y (\f.f (Y f)) will create a Y combinator 
+    that will behave in the same way as the one defined previously.
 
 ADDITIONAL COMMANDS:
  - :quit or :q will quit the interpreter.
