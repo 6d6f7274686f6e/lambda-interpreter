@@ -27,7 +27,11 @@ eval :: Expr -> Env -> Expr
 eval (Singleton v) = maybe (Singleton v) id . M.lookup v
 eval (Lambda v e)  = rename v e >>= \x -> Lambda x . eval e . M.insert v (Singleton x)
 eval (App e1 e2)   = eval e1 >>= \case
-  Lambda v e -> eval e . (M.insert v =<< eval e2)
+  Lambda v e -> if v `isFreeIn` e2
+                then let w = (+1) <$> v 
+                     in (eval =<< eval e . M.insert v (Singleton w))
+                      . (M.insert w =<< eval e2)
+                else eval e . (M.insert v =<< eval e2)
   x          -> App x . eval e2
 
 -- renames a Variable in Expr, only if necessary
