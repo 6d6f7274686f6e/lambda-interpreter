@@ -1,6 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 import Data.Char
+import Data.Maybe
 import qualified Data.Map as M
 import System.IO
 import Control.Monad
@@ -15,16 +17,16 @@ data Expr = App Expr Expr
 instance Show Expr where
     show (Singleton (v, 0))        = [v]
     show (Singleton (v, i))        = v:"_" ++ show i
-    show (App e1@(App _ _) e2)     = (init $ show e1) ++ " " ++ show e2 ++ ")"
-    show (App e1 e2)               = "(" ++ (show e1) ++ " " ++ (show e2) ++ ")"
-    show (Lambda v e@(Lambda _ _)) = "(λ" ++ (show (Singleton v)) ++ (tail $ tail $ show e)
-    show (Lambda v e)              = "(λ" ++ (show (Singleton v)) ++ "." ++ show e ++ ")"
+    show (App e1@(App _ _) e2)     = init (show e1) ++ " " ++ show e2 ++ ")"
+    show (App e1 e2)               = "(" ++ show e1 ++ " " ++ show e2 ++ ")"
+    show (Lambda v e@(Lambda _ _)) = "(λ" ++ show (Singleton v) ++ tail (tail $ show e)
+    show (Lambda v e)              = "(λ" ++ show (Singleton v) ++ "." ++ show e ++ ")"
 
 type Var = (Char, Int)
 type Env = M.Map Var Expr
 
 eval :: Expr -> Env -> Expr
-eval (Singleton v) = maybe (Singleton v) id . M.lookup v
+eval (Singleton v) = fromMaybe (Singleton v) . M.lookup v
 eval (Lambda v e)  = rename v e >>= \x -> Lambda x . eval e . M.insert v (Singleton x)
 eval (App e1 e2)   = eval e1 >>= \case
   Lambda v e -> if v `isFreeIn` e2
@@ -55,7 +57,7 @@ parseExpr =   try (foldl App <$> factor <*> some (char ' ' *> factor))
                <|> try (Singleton <$> var)
                <|> (char '(' *> parseExpr <* char ')')
         var    =   try ((,) <$> letter <*> (read <$> (char '_' >> some digit)))
-               <|> (flip (,) 0) <$> letter
+               <|> (,0) <$> letter
 
 parseLambda :: String -> Either ParseError Expr
 parseLambda = parse (parseExpr <* eof) ""
@@ -106,7 +108,7 @@ repl env = do hSetBuffering stdin LineBuffering
                 ":SKI":ss     -> process eval (M.union envSKI env) ss
                 ":T":ss       -> process (const . transform) env ss
                 ss            -> process eval env ss
-            where process f env s = case (parseLambda $ unwords s) of
+            where process f env s = case parseLambda $ unwords s of
                                       Right l -> do putStr $ show l
                                                     putStr " = "
                                                     print $ f l env
